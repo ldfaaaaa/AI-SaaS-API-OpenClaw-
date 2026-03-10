@@ -1,0 +1,57 @@
+{
+  "name": "ai-saas-api",
+  "version": "1.0.0",
+  "description": "AI设计可视化助手 - 后端API",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:push": "prisma db push",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "keywords": [
+    "fastify",
+    "typescript",
+    "prisma",
+    "jwt",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/jwt": "^8.0.0",
+    "@prisma/client": "^5.8.0",
+    "@types/ws": "^8.18.1",
+    "adm-zip": "^0.5.10",
+    "ali-oss": "^6.23.0",
+    "bcrypt": "^5.1.1",
+    "bullmq": "^5.70.4",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.25.2",
+    "ioredis": "^5.3.2",
+    "ws": "^8.19.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.5",
+    "@types/ali-oss": "^6.23.3",
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^20.10.6",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.1",
+    "prisma": "^5.8.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

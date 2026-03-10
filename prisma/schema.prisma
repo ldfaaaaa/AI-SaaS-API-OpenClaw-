@@ -1,0 +1,262 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== 枚举定义 ==========
+
+enum Role {
+  user
+  admin
+}
+
+enum MembershipType {
+  none      // 非会员
+  monthly   // 月度会员
+  quarterly // 季度会员
+  yearly    // 年度会员
+}
+
+enum PaymentMethod {
+  wechat  // 微信支付
+  alipay  // 支付宝
+}
+
+enum PaymentStatus {
+  pending // 待支付
+  paid    // 已支付
+  failed  // 支付失败
+  refunded // 已退款
+}
+
+enum TaskType {
+  image // 图片生成
+  video // 视频生成
+  tts   // TTS声音克隆
+  marketing_package // 营销内容包生成
+  voiceover_script // 配音解说脚本生成
+}
+
+enum TaskStatus {
+  queued     // 队列中
+  processing // 处理中
+  completed  // 已完成
+  failed     // 失败
+}
+
+// ========== 模型定义 ==========
+
+model User {
+  id                    String          @id @default(cuid())
+  email                 String          @unique
+  password_hash         String
+  phone                 String?         @unique
+  nickname              String?
+  avatar_url            String?
+  role                  Role            @default(user)
+   is_active           Boolean   @default(true) // 是否为活跃档案（用于确保每个用户最多一个活跃档案）
+  balance               Float           @default(0) @db.DoublePrecision
+  membership_type       MembershipType  @default(none)
+  membership_expires_at DateTime?
+  created_at            DateTime        @default(now())
+  updated_at            DateTime        @updatedAt
+
+  // 关系
+  orders                Order[]
+  generation_tasks      GenerationTask[]
+  daily_quotas          DailyQuota[]
+  voice_profiles        VoiceProfile[]
+  content_packages      ContentPackage[]
+  workflow_executions   WorkflowExecution[]
+  @@map("users")
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  user_id         String
+  order_no        String        @unique // 订单号
+  payment_method  PaymentMethod
+  payment_status  PaymentStatus @default(pending)
+  amount          Float         @db.DoublePrecision // 订单金额（元）
+  product_type    String        // 商品类型：membership/image/video/tts
+  product_desc    String        // 商品描述
+  transaction_id  String?       // 第三方支付流水号
+  paid_at         DateTime?     // 支付时间
+  expired_at      DateTime?     // 订单过期时间
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+
+  // 关系
+  user            User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([order_no])
+  @@index([payment_status])
+  @@index([created_at])
+  @@map("orders")
+}
+
+model GenerationTask {
+  id                String      @id @default(cuid())
+  user_id           String
+  task_type         TaskType
+  task_status       TaskStatus  @default(queued)
+  prompt            String      @db.Text // 用户输入的提示词
+  negative_prompt   String?     @db.Text // 负面提示词
+  parameters        Json?       // 生成参数（JSON格式）
+  douyin_task_id    String?     // 豆包API返回的任务ID
+  result_url        String?     // 生成结果URL
+  thumbnail_url     String?     // 缩略图URL
+  error_message     String?     @db.Text // 错误信息
+  progress          Int         @default(0) // 进度百分比 0-100
+  duration_seconds  Int?        // 视频时长（秒）
+  voice_profile_id  String?     // 关联的声音档案（TTS任务使用）
+  content_package_id String?    // 关联的内容包（OpenClaw工作流使用）
+  cost_amount       Float?      @db.DoublePrecision // 扣费金额
+  started_at        DateTime?   // 开始处理时间
+  completed_at      DateTime?   // 完成时间
+  created_at        DateTime    @default(now())
+  updated_at        DateTime    @updatedAt
+
+  // 关系
+  user              User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  voice_profile     VoiceProfile? @relation(fields: [voice_profile_id], references: [id], onDelete: SetNull)
+  content_package   ContentPackage? @relation(fields: [content_package_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([task_type])
+  @@index([task_status])
+  @@index([douyin_task_id])
+  @@index([created_at])
+  @@map("generation_tasks")
+}
+
+model DailyQuota {
+  id              String    @id @default(cuid())
+  user_id         String
+  quota_date      DateTime  @db.Date // 额度日期（每天0点重置）
+  image_used      Int       @default(0) // 已使用图片次数
+  image_limit     Int       @default(0) // 图片额度上限（会员20次，非会员0次）
+  video_used      Int       @default(0) // 已使用视频次数
+  video_limit     Int       @default(0) // 视频额度上限（会员10次，非会员0次）
+  tts_used        Int       @default(0) // 已使用TTS次数
+  tts_limit       Int       @default(0) // TTS额度上限
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  // 关系
+  user            User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, quota_date])
+  @@index([user_id])
+  @@index([quota_date])
+  @@map("daily_quotas")
+}
+
+model VoiceProfile {
+  id                  String    @id @default(cuid())
+  user_id             String
+  profile_name        String    // 声音档案名称
+  voice_id            String?   // 火山引擎返回的声音ID
+  sample_audio_url    String    // 训练样本音频URL
+  voice_description   String?   @db.Text // 声音描述
+  is_trained          Boolean   @default(false) // 是否已训练完成
+  training_status     String    @default("pending") // 训练状态：pending/training/completed/failed
+  error_message       String?   @db.Text // 训练失败原因
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  // 关系
+  user                User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  generation_tasks    GenerationTask[]
+
+  @@index([user_id])
+  @@index([voice_id])
+  @@map("voice_profiles")
+}
+
+model ContentPackage {
+  id                  String    @id @default(cuid())
+  user_id             String
+  package_name        String    // 内容包名称
+  workflow_id         String?   // OpenClaw工作流ID
+  package_type        String    // 内容包类型：marketing/voiceover/custom
+  description         String?   @db.Text // 内容包描述
+  template_data       Json?     // 模板数据（JSON格式）
+  assets              Json?     // 资源列表（图片、视频URL等）
+  config              Json?     // 配置参数
+  result_data         Json?     // 生成结果数据（标题、文案、标签等）
+  result_zip_url      String?   // 打包下载链接
+  is_public           Boolean   @default(false) // 是否公开
+  download_count      Int       @default(0) // 下载次数
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  // 关系
+  user                User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  generation_tasks    GenerationTask[]
+  workflow_executions WorkflowExecution[]
+
+  @@index([user_id])
+  @@index([workflow_id])
+  @@index([is_public])
+  @@map("content_packages")
+}
+
+// ========== OpenClaw 工作流模型 ==========
+
+model WorkflowExecution {
+  id                  String    @id @default(cuid())
+  user_id             String
+  content_package_id  String
+  workflow_type       String    // 工作流类型：marketing_package/voiceover_script
+  workflow_status     String    @default("queued") // queued/running/completed/failed
+  total_steps         Int       // 总步骤数
+  completed_steps     Int       @default(0) // 已完成步骤数
+  current_step        String?   // 当前步骤名称
+  error_message       String?   @db.Text // 错误信息
+  started_at          DateTime?
+  completed_at        DateTime?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  // 关系
+  user                User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  content_package     ContentPackage @relation(fields: [content_package_id], references: [id], onDelete: Cascade)
+  steps               WorkflowStep[]
+
+  @@index([user_id])
+  @@index([content_package_id])
+  @@index([workflow_status])
+  @@index([created_at])
+  @@map("workflow_executions")
+}
+
+model WorkflowStep {
+  id                  String    @id @default(cuid())
+  workflow_id         String
+  step_name           String    // 步骤名称：generate_titles/generate_content等
+  step_order          Int       // 步骤顺序
+  step_status         String    @default("pending") // pending/running/completed/failed/skipped
+  step_input          Json?     // 步骤输入参数
+  step_output         Json?     // 步骤输出结果
+  error_message       String?   @db.Text // 错误信息
+  started_at          DateTime?
+  completed_at        DateTime?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  // 关系
+  workflow            WorkflowExecution @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+
+  @@index([workflow_id])
+  @@index([step_order])
+  @@map("workflow_steps")
+}
